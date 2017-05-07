@@ -1,0 +1,259 @@
+#!/bin/sh -efu
+
+QEMU=qemu-system-x86_64
+CURL=curl
+
+PROGNAME=$(basename "$0")
+
+fatal() {
+	echo "$PROGNAME: $*" >&2
+	exit 1
+}
+
+usage() {
+	echo "usage: $PROGNAME <command> [<args>]"
+	echo
+	echo "Linux in a Virtual Machine"
+	echo
+	echo "Available commands:"
+	echo "  start       Start a virtual machine"
+	echo "  stop        Stop a virtual machine"
+	echo "  ssh         Launch an SSH session to a virtual machine"
+	echo "  scpto       Copy files to a virtual machine"
+	echo "  screenshot  Make a screenshot of a virtual machine"
+	echo "  help        Show a help"
+	echo
+	echo "See '$PROGNAME help <command>' to read about a specific subcommand."
+}
+
+usage_start() {
+	echo "usage: $PROGNAME start <vmdir>"
+}
+
+usage_stop() {
+	echo "usage: $PROGNAME stop <vmdir>"
+}
+
+usage_ssh() {
+	echo "usage: $PROGNAME ssh <vmdir> [<command>]"
+}
+
+usage_scpto() {
+	echo "usage: $PROGNAME scpto <vmdir> <source...> <target>"
+}
+
+usage_screenshot() {
+	echo "usage: $PROGNAME screenshot <vmdir> <screenshot.ppm>"
+}
+
+usage_help() {
+	echo "usage: $PROGNAME help [<command>]"
+}
+
+help() {
+	if [ $# -eq 0 ]; then
+		usage
+		exit
+	fi
+
+	if [ $# -eq 1 ]; then
+		case "$1" in
+		start)
+			usage_start
+			echo
+			echo "Environment variables:"
+			echo "    LIVM_RESOURCE_DIR  Location of the boot directory"
+			echo "    LIVM_SSH_PORT      Host port for the SSH daemon"
+			echo "    LIVM_DEBUG=1       Launch a virtual machine in the foreground"
+			echo "    LIVM_VGA=0x303     Enable a framebuffer console"
+			;;
+		stop)
+			usage_stop
+			;;
+		ssh)
+			usage_ssh
+			;;
+		scpto)
+			usage_scpto
+			;;
+		screenshot)
+			usage_screenshot
+			;;
+		help)
+			usage_help
+			;;
+		*)
+			echo "$PROGNAME: no help for $1" >&2
+			exit 1
+		esac
+		exit
+	fi
+
+	usage_help >&2
+	exit 1
+}
+
+guess_resource_dir() {
+	local bindir="$(dirname $0)"
+	local d="$bindir/../share/livm"
+	if [ -d "$d" ]; then
+		echo "$d"
+		return
+	fi
+	d="$bindir/../share"
+	if [ -d "$bindir/../.git" -a -d "$d" ]; then
+		echo "$d"
+		return
+	fi
+	fatal "unable to determine location of the resource directory"
+}
+
+start() {
+	: ${LIVM_RESOURCE_DIR:=$(guess_resource_dir)}
+	: ${LIVM_SSH_PORT=2222}
+
+	[ $# -eq 1 ] || { usage_start >&2; exit 1; }
+	local vmdir="$1"
+
+	if [ -e "$vmdir" ]; then
+		fatal "$vmdir already exists"
+	fi
+
+	mkdir -p "$vmdir/secrets/root"
+	echo "$LIVM_SSH_PORT" >"$vmdir/ssh_port"
+	ssh-keygen -q -t rsa -N "" -f "$vmdir/secrets/root/id_rsa"
+
+	local chardev=file,id=char0,path="$vmdir/console.log"
+	local daemonize="-display none -daemonize"
+	local append=" quiet"
+	if [ -n "${LIVM_DEBUG-}" ]; then
+		chardev=stdio,id=char0
+		daemonize=
+		append=
+	fi
+	append="$append${LIVM_VGA:+ vga=}${LIVM_VGA:-}"
+
+	$QEMU \
+		-kernel "$LIVM_RESOURCE_DIR/boot/vmlinuz" \
+		-initrd "$LIVM_RESOURCE_DIR/boot/initrd.img" \
+		-append "console=ttyS0 consoleblank=0 id_rsa_pub=$(awk '{ print $2 }' "$vmdir/secrets/root/id_rsa.pub")$append" \
+		-netdev user,id=net0,hostfwd=tcp:127.0.0.1:$LIVM_SSH_PORT-:22 \
+		-device virtio-net,netdev=net0 \
+		-chardev "$chardev" \
+		-device isa-serial,chardev=char0 \
+		-qmp unix:"$vmdir/qmp-sock",server,nowait \
+		-pidfile "$vmdir/qemu.pid" \
+		$daemonize
+
+	if [ -n "${LIVM_DEBUG-}" ]; then
+		rm -rf "$vmdir"
+		exit
+	fi
+
+	local ready=0
+	for i in 1 2 3 4 5 6 7 8 9 10; do
+		if test -e "$vmdir/qemu.pid" && ! kill -0 "$(cat "$vmdir/qemu.pid")" 2>/dev/null; then
+			cat "$vmdir/console.log"
+			echo "$PROGNAME: virtual machine terminated" >&2
+			rm -rf "$vmdir"
+			exit 1
+		fi
+		if grep -q "Starting dropbear: OK" "$vmdir/console.log" 2>/dev/null; then
+			ready=1
+			break
+		fi
+		sleep 1
+	done
+
+	if [ $ready -ne 1 ]; then
+		echo "$PROGNAME: timeout while waiting for dropbear" >&2
+		cat "$vmdir/console.log" >&2
+		kill "$(cat "$vmdir/qemu.pid")"
+		rm -rf "$vmdir"
+		exit 1
+	fi
+}
+
+stop() {
+	[ $# -eq 1 ] || { usage_stop >&2; exit 1; }
+	local vmdir="$1"
+
+	if [ ! -d "$vmdir" ]; then
+		fatal "$vmdir: no such directory"
+	fi
+
+	local pid=$(cat "$vmdir/qemu.pid")
+	if [ "$(ps -o comm= -p "$pid")" != "$QEMU" ]; then
+		echo "$PROGNAME: it looks like the process with PID $pid has already been terminated, removing temporary files..." >&2
+	else
+		kill -- "$pid"
+	fi
+
+	rm -r "$vmdir"
+}
+
+ssh() {
+	local vmdir="$1"; shift
+
+	if [ ! -d "$vmdir" ]; then
+		fatal "$vmdir: no such directory"
+	fi
+
+	if [ ! -e "$vmdir/ssh_port" ]; then
+		fatal "$vmdir/ssh_port: no such file"
+	fi
+
+	exec ssh -o NoHostAuthenticationForLocalhost=yes -p "$(cat "$vmdir/ssh_port")" -i "$vmdir/secrets/root/id_rsa" root@localhost "$@"
+}
+
+scpto() {
+	[ $# -ge 2 ] || { usage_scpto >&2; exit 1; }
+	local vmdir="$1"; shift
+
+	if [ ! -d "$vmdir" ]; then
+		fatal "$vmdir: no such directory"
+	fi
+
+	if [ ! -e "$vmdir/ssh_port" ]; then
+		fatal "$vmdir/ssh_port: no such file"
+	fi
+
+	local i=$#
+	while [ $i -ne 1 ]; do
+		set -- "$@" "$1"; shift
+		i=$(($i - 1))
+	done
+	set -- "$@" "root@localhost:$1"; shift
+
+	exec scp -o NoHostAuthenticationForLocalhost=yes -P "$(cat "$vmdir/ssh_port")" -i "$vmdir/secrets/root/id_rsa" "$@"
+}
+
+screenshot() {
+	[ $# -eq 2 ] || { usage_screenshot >&2; exit 1; }
+	local vmdir="$1"
+	local output="$2"
+
+	if [ ! -d "$vmdir" ]; then
+		fatal "$vmdir: no such directory"
+	fi
+
+	local dir="$(dirname -- "$output")"
+	if [ ! -d "$dir" ]; then
+		fatal "$dir: not a directory"
+	fi
+	local abs_output="$(cd -- "$dir"; pwd -P)/$(basename -- "$output")"
+
+	# TODO(dmage): use proper json
+	# TODO(dmage): check responses
+	printf '{"execute": "qmp_capabilities"}\n{"execute": "screendump", "arguments": {"filename": "%s"}}\n' "$abs_output" | nc -U "$vmdir/qmp-sock"
+}
+
+[ $# -ge 1 ] || { usage >&2; exit 1; }
+case "$1" in
+start|stop|ssh|scpto|screenshot|help)
+	"$@"
+	;;
+*)
+	usage >&2
+	exit 1
+esac

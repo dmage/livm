@@ -1,0 +1,11 @@
+/initramfs/bin/busybox
+/initramfs/bin/scp
+/initramfs/etc/udhcpc/default.script
+/initramfs/lib/*
+/initramfs/sbin/dropbear
+/opt
+/share
+/src/busybox-*
+/src/dropbear-*
+/src/linux-*
+/src/musl-*

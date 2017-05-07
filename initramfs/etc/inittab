@@ -1,0 +1,2 @@
+::sysinit:/etc/init.d/sysinit
+::respawn:/bin/sh --login
