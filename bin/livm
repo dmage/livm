@@ -245,7 +245,7 @@ screenshot() {
 
 	# TODO(dmage): use proper json
 	# TODO(dmage): check responses
-	printf '{"execute": "qmp_capabilities"}\n{"execute": "screendump", "arguments": {"filename": "%s"}}\n' "$abs_output" | nc -U "$vmdir/qmp-sock"
+	printf '{"execute": "qmp_capabilities"}\n{"execute": "screendump", "arguments": {"filename": "%s"}}\n' "$abs_output" | socat - UNIX-CLIENT:"$vmdir/qmp-sock"
 }
 
 [ $# -ge 1 ] || { usage >&2; exit 1; }
