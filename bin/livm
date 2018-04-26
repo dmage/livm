@@ -183,8 +183,11 @@ stop() {
 	fi
 
 	local pid=$(cat "$vmdir/qemu.pid")
-	if [ "$(ps -o comm= -p "$pid")" != "$QEMU" ]; then
-		echo "$PROGNAME: it looks like the process with PID $pid has already been terminated, removing temporary files..." >&2
+	local ps_args=$(ps -o args= -p "$pid" || true)
+	if [ -z "$ps_args" ]; then
+		echo "$PROGNAME: the QEMU process with PID $pid has already been terminated, removing stale files..." >&2
+	elif [ "${ps_args%% *}" != "$QEMU" ]; then
+		echo "$PROGNAME: the process with PID $pid doesn't look like a QEMU process, removing temporary files..." >&2
 	else
 		kill -- "$pid"
 	fi
