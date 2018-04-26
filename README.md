@@ -1,6 +1,6 @@
 ## livm — Linux in a Virtual Machine
 
-LiVM is a minimal Linux in a Virtual Machine. It created to automate testing of low-level utilities like setfont.
+LiVM is a minimal Linux in a Virtual Machine. It is created to automate testing of low-level utilities like setfont.
 
 It consists of:
 
@@ -34,7 +34,7 @@ There is nothing more inside, but glibc and scp is a good foundation to bootstra
 
 ### Error: could not set up host forwarding rule 'tcp:127.0.0.1:2222-:22'
 
-By default it binds to host port 2222. If it's already in use by another program or you want to run multiple machines simultaneously, you can choose a different port:
+By default, it binds to the host port 2222. If it's already in use by another program or you want to run multiple machines simultaneously, you can choose a different port:
 
     $ LIVM_SSH_PORT=8022 livm start ./vm
 
@@ -65,8 +65,8 @@ Yes, but you need [Docker](https://www.docker.com).
 
 ### How to upgrade the kernel?
 
-Upgrading to 4.11:
+Upgrading to X.Y:
 
-    $ sed -i.bak -e 's/^\(KERNEL_VERSION =\).*/\1 4.11/' ./mkinclude/kernel.mk
+    $ sed -i.bak -e 's/^\(KERNEL_VERSION =\).*/\1 X.Y/' ./mkinclude/kernel.mk
     $ make kernel-menuconfig KERNEL_MENUCONFIG=oldconfig
     $ make share/boot/vmlinuz
