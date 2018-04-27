@@ -13,8 +13,8 @@ There is nothing more inside, but glibc and scp is a good foundation to bootstra
 
 ### Installation
 
-    $ wget https://github.com/dmage/livm/releases/download/v0.1.0/livm-0.1.0.tar.gz
-    $ tar -xf livm-0.1.0.tar.gz -C /usr/local
+    $ wget https://github.com/dmage/livm/releases/download/v0.2.0/livm-0.2.0.tar.gz
+    $ tar -xf livm-0.2.0.tar.gz -C /usr/local
 
 ### Usage
 
