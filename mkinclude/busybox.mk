@@ -1,4 +1,4 @@
-BUSYBOX_VERSION = 1.26.2
+BUSYBOX_VERSION = 1.28.3
 
 src/busybox-$(BUSYBOX_VERSION).tar.bz2: | src
 	wget https://www.busybox.net/downloads/busybox-$(BUSYBOX_VERSION).tar.bz2 -O $@

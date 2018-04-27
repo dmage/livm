@@ -1,4 +1,4 @@
-DROPBEAR_VERSION = 2016.74
+DROPBEAR_VERSION = 2018.76
 
 src/dropbear-$(DROPBEAR_VERSION).tar.bz2: | src
 	wget https://matt.ucc.asn.au/dropbear/releases/dropbear-$(DROPBEAR_VERSION).tar.bz2 -O $@

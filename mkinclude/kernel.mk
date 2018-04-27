@@ -1,5 +1,5 @@
 KERNEL_MENUCONFIG ?= menuconfig
-KERNEL_VERSION = 4.11
+KERNEL_VERSION = 4.16.5
 
 src/linux-$(KERNEL_VERSION).tar.xz: | src
 	wget https://cdn.kernel.org/pub/linux/kernel/v4.x/linux-$(KERNEL_VERSION).tar.xz -O $@

@@ -16,6 +16,7 @@ docker run --rm -i -t \
 	-v "$(CURDIR)/initramfs:/srv/initramfs" \
 	-v "$(CURDIR)/opt:/srv/opt" \
 	-v "$(CURDIR)/share:/srv/share" \
+	-v "$(CURDIR)/bin:/srv/bin:ro" \
 	-v "$(CURDIR)/src:/srv/src:ro" \
 	-v "$(CURDIR)/Makefile:/srv/Makefile:ro" \
 	-v "$(CURDIR)/mkinclude:/srv/mkinclude:ro" \
@@ -51,6 +52,15 @@ ifeq ($(uname_s),Darwin)
 	docker volume rm livm-build
 else
 	-rm -rf ./build
+endif
+
+dist:
+ifeq ($(uname_s),Darwin)
+	$(docker-make)
+else
+	mkdir -p ./build/release
+	make install DESTDIR=./build/release
+	tar -zcf ./opt/livm-$(LIVM_VERSION).tar.gz --owner=0 --group=0 -C ./build/release bin share
 endif
 
 .PHONY: docker-sh build install clean
